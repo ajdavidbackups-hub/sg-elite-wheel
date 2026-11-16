@@ -1,225 +1,409 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SG Elite Wheel</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>SG Elite Wheel</title>
 <style>
-  :root{--bg:#000;--panel:#0d0a1f;--gold:#ff09a8;--text:#f2f4ff;--red:#ff4d6d}
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 30%,#2a0a3a,#000 65%);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px}
-  h1{margin:4px 0 2px;letter-spacing:3px;color:var(--gold);text-shadow:0 0 20px #ff09a8aa;text-align:center}
-  .logo{height:90px;margin:0 auto;display:block;mix-blend-mode:screen}
-  .sub{opacity:.7;margin-bottom:12px;text-align:center}
-  .main{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1100px}
-  .stage{position:relative;width:min(92vw,640px);aspect-ratio:1}
-  canvas#wheel{width:100%;height:100%;display:block}
-  .pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:44px solid var(--gold);filter:drop-shadow(0 3px 6px #000);z-index:2}
-  .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17%;aspect-ratio:1;border-radius:50%;border:4px solid var(--gold);background:#000 url(logo.png) center/160% no-repeat;color:transparent;font-weight:800;font-size:clamp(12px,2.6vw,20px);cursor:pointer;z-index:2;box-shadow:0 0 20px #000}
-  .hub:disabled{opacity:.5;cursor:default}
-  .side{width:min(92vw,320px);display:flex;flex-direction:column;gap:12px}
-  .card{background:var(--panel);border-radius:14px;padding:14px;border:1px solid #5a1050}
-  .card h3{margin:0 0 8px;font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:.8}
-  textarea{width:100%;height:170px;background:#0b0d17;color:var(--text);border:1px solid #5a1050;border-radius:8px;padding:8px;font:inherit;resize:vertical}
-  button.btn{background:var(--gold);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;margin-top:8px;margin-right:6px}
-  button.btn.alt{background:#3a1550;color:var(--text)}
-  ol{margin:0;padding-left:22px;max-height:200px;overflow:auto;font-size:14px}
-  ol li{padding:2px 0;color:#ff9db0}
-  #status{font-size:18px;text-align:center;min-height:28px;margin:8px 0}
-  #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:#000a;z-index:10;text-align:center}
-  #overlay.show{display:flex}
-  #overlay .crown{font-size:90px}
-  #overlay .name{font-size:clamp(36px,9vw,90px);font-weight:900;color:var(--gold);text-shadow:0 0 30px #ff09a8}
-  #overlay .out{font-size:clamp(28px,7vw,64px);font-weight:900;color:var(--red)}
-  #fx{position:fixed;inset:0;pointer-events:none;z-index:11}
-</style>
-</head>
-<body>
+/* Layout: logo header, big wheel stage on the left, host controls and eliminated list on the right. Neon pink on black, one committed look. */
+:root{--bg:#000;--panel:#0d0a1f;--line:#5a1050;--pink:#ff09a8;--pink2:#ff5cc8;--text:#f4f0ff;--dim:#a99bc7;--out:#ff9db0;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(circle at 50% 25%,#2a0a3a,#000 65%) var(--bg);min-height:100%;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:center}
+.logo{height:84px;max-width:100%;mix-blend-mode:screen}
+h1{margin:2px 0 0;letter-spacing:.3em;color:var(--pink);font-size:clamp(20px,4vw,30px);text-shadow:0 0 18px #ff09a8aa;text-align:center;text-wrap:balance}
+.sub{color:var(--dim);margin:4px 0 6px;text-align:center}
+.badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:6px 0}
+.badge{font-size:12px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--dim)}
+.badge.on{color:#fff;border-color:var(--pink);box-shadow:0 0 12px #ff09a855}
+#status{font-size:clamp(16px,2.6vw,22px);text-align:center;min-height:30px;margin:6px 0 10px;text-wrap:balance}
+.main{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1100px}
+.col{width:min(100%,620px)}
+.stage{position:relative;width:min(100%,620px);aspect-ratio:1}
+canvas#wheel{width:100%;height:100%;display:block}
+.pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:44px solid var(--pink);filter:drop-shadow(0 3px 6px #000);z-index:2}
+.hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17%;aspect-ratio:1;border-radius:50%;border:4px solid var(--pink);background:#000 url(logo.png) center/150% no-repeat;cursor:pointer;z-index:2;box-shadow:0 0 20px #000}
+.hub:disabled{cursor:default;opacity:.55}
+.hub:focus-visible,.btn:focus-visible,textarea:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.side{width:min(100%,320px);display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border-radius:14px;padding:14px;border:1px solid var(--line)}
+.card h3{margin:0 0 8px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+textarea{width:100%;height:170px;background:#05030f;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
+.btn{background:var(--pink);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;margin:8px 6px 0 0;font:inherit;font-weight:700}
+.btn.alt{background:#2c1245;color:var(--text)}
+ol{margin:0;padding-left:24px;max-height:220px;overflow:auto;font-size:14px;color:var(--out)}
+ol li{padding:2px 0}
+.empty{color:var(--dim);font-size:14px}
+#overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:#000b;z-index:10;text-align:center;padding:16px}
+#overlay.show{display:flex}
+#overlay .crown{font-size:90px}
+#overlay .lbl{font-size:24px;color:var(--dim);letter-spacing:.2em}
+#overlay .name{font-size:clamp(34px,9vw,90px);font-weight:900;color:var(--pink);text-shadow:0 0 30px var(--pink);overflow-wrap:anywhere}
+#overlay .out{font-size:clamp(28px,7vw,64px);font-weight:900;color:var(--out);overflow-wrap:anywhere}
+#fx{position:fixed;inset:0;pointer-events:none;z-index:11}
+.bigspin{display:block;width:min(100%,620px);margin:14px auto 0;padding:16px;font-size:20px;letter-spacing:.2em;border-radius:12px;border:0;background:var(--pink);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 0 24px #ff09a866}
+.bigspin:disabled{opacity:.4;cursor:default;box-shadow:none}
+.btn,.bigspin,.hub{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.btn{min-height:44px}
+@media (max-width:520px){
+  .logo{height:64px}
+  .pointer{border-left-width:14px;border-right-width:14px;border-top-width:32px}
+  .main{gap:16px}
+  textarea{height:140px;font-size:16px}
+  .badge{font-size:11px}
+}
+.note{font-size:12px;color:var(--dim);margin-top:8px}
+</style></head><body>
+
 <img class="logo" src="logo.png" alt="SG">
 <h1>ELITE WHEEL</h1>
-<div class="sub">Last name standing wins. Whoever the wheel stops on is OUT.</div>
-<div id="status">Add your names, then hit Start.</div>
+<div class="sub">Last name standing wins. Whoever the wheel stops on is out.</div>
+<div class="badges"><span class="badge" id="roleB">Watching</span><span class="badge" id="liveB">Connecting…</span></div>
+<div id="status">Waiting for the host to start.</div>
 
 <div class="main">
+  <div class="col">
   <div class="stage">
     <div class="pointer"></div>
-    <canvas id="wheel" width="1280" height="1280"></canvas>
-    <button class="hub" id="spin" disabled aria-label="Spin"></button>
+    <canvas id="wheel" width="1240" height="1240"></canvas>
+    <button class="hub" id="spin" disabled aria-label="Spin the wheel"></button>
   </div>
-
+  <button class="bigspin" id="spin2" disabled hidden>SPIN</button>
+  </div>
   <div class="side">
-    <div class="card" id="setup">
+    <div class="card" id="create" hidden>
+      <h3>New raffle</h3>
+      <div class="note" style="margin:0 0 8px">This makes a private host link for you and a watch-only link for the guild.</div>
+      <button class="btn" id="make">Create raffle</button>
+    </div>
+    <div class="card" id="share" hidden>
+      <h3>Watch link (send to the guild)</h3>
+      <input id="watchUrl" readonly style="width:100%;background:#05030f;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:13px">
+      <button class="btn" id="copyWatch">Copy</button>
+      <div class="note">Keep this browser tab's address private. It is your host key.</div>
+    </div>
+    <div class="card" id="setup" hidden>
       <h3>Participants (one per line)</h3>
       <textarea id="names"></textarea>
       <button class="btn" id="start">Start raffle</button>
       <button class="btn alt" id="sample">Fill 25 sample</button>
+      <div class="note">Only you see this box. Watchers see the wheel and every spin live.</div>
     </div>
     <div class="card">
       <h3>Eliminated (<span id="cnt">0</span>)</h3>
       <ol id="outList"></ol>
-      <button class="btn alt" id="reset">Reset</button>
+      <div class="empty" id="outEmpty">Nobody yet.</div>
+      <button class="btn alt" id="reset" hidden>New raffle</button>
       <button class="btn alt" id="mute">Sound: on</button>
     </div>
   </div>
 </div>
-
 <div id="overlay"></div>
 <canvas id="fx"></canvas>
 
 <script>
 const $ = id => document.getElementById(id);
 const canvas = $('wheel'), ctx = canvas.getContext('2d');
-const COLORS = ['#ff09a8','#12123a','#c4007f','#1f1f66','#ff5cc8','#0a0a2a'];
-let players = [], eliminated = [], angle = 0, spinning = false, sound = true;
+const COLORS = ['#ff09a8','#14143f','#c4007f','#22226e','#ff5cc8','#0b0b2b'];
+const TAU = Math.PI*2;
+const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-function rand(){ const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
+let isHost = false, room = null, sound = true;
+// state = {phase:'setup'|'ready'|'done', players:[], eliminated:[], spin:null|{id,target,jit,turns,dur}, winner:''}
+let state = {phase:'setup', players:[], eliminated:[], spin:null, winner:''};
+let latest = state, busy = false, seenSpin = '', spinStart = 0, spinClock = 0, angle = 0;
+
+function rand(){ const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]/4294967296; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ---------- audio ---------- */
 let ac;
-function tick(){
+function beep(freq, dur, vol, type, slide){
   if(!sound) return;
   try{
     ac = ac || new (window.AudioContext||window.webkitAudioContext)();
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.frequency.value = 900; g.gain.setValueAtTime(.08, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .05);
-    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + .05);
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type||'sine'; o.frequency.setValueAtTime(freq,t);
+    if(slide) o.frequency.exponentialRampToValueAtTime(slide,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(t+dur);
   }catch(e){}
 }
-function boom(freq=140){
-  if(!sound) return;
-  try{
-    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type='sawtooth'; o.frequency.setValueAtTime(freq, ac.currentTime);
-    o.frequency.exponentialRampToValueAtTime(40, ac.currentTime + .5);
-    g.gain.setValueAtTime(.2, ac.currentTime); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .6);
-    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + .6);
-  }catch(e){}
-}
+const tick = () => beep(900,.05,.07);
+const boom = f => beep(f||140,.6,.2,'sawtooth',40);
 
 /* ---------- drawing ---------- */
 function draw(){
-  const W = canvas.width, c = W/2, r = c - 14, n = players.length;
+  const W = canvas.width, c = W/2, r = c-14, n = state.players.length;
   ctx.clearRect(0,0,W,W);
   ctx.save(); ctx.translate(c,c);
   ctx.beginPath(); ctx.arc(0,0,r+10,0,7); ctx.fillStyle='#ff09a8'; ctx.fill();
-  if(!n){ ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle='#151933'; ctx.fill(); ctx.restore(); return; }
+  if(!n){ ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle='#0d0a1f'; ctx.fill(); ctx.restore(); return; }
   ctx.rotate(angle);
-  const sl = Math.PI*2/n;
+  const sl = TAU/n;
   for(let i=0;i<n;i++){
     ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,i*sl,(i+1)*sl); ctx.closePath();
-    ctx.fillStyle = COLORS[i % COLORS.length]; ctx.fill();
-    ctx.strokeStyle='#0b0d17'; ctx.lineWidth=3; ctx.stroke();
-    ctx.save(); ctx.rotate(i*sl + sl/2);
+    ctx.fillStyle = COLORS[i%COLORS.length]; ctx.fill();
+    ctx.strokeStyle='#000'; ctx.lineWidth=3; ctx.stroke();
+    ctx.save(); ctx.rotate(i*sl+sl/2);
     ctx.fillStyle='#fff'; ctx.textAlign='right'; ctx.textBaseline='middle';
-    ctx.shadowColor='#0008'; ctx.shadowBlur=4;
-    const fs = Math.max(16, Math.min(46, r*sl*0.5));
-    ctx.font = `700 ${fs}px system-ui,sans-serif`;
-    let t = players[i];
-    const maxW = r*0.72;
-    while(ctx.measureText(t).width > maxW && t.length > 3) t = t.slice(0,-2);
-    if(t !== players[i]) t += '…';
-    ctx.fillText(t, r-26, 0);
+    ctx.shadowColor='#000a'; ctx.shadowBlur=4;
+    ctx.font = `700 ${Math.max(16,Math.min(46,r*sl*.5))}px Inter,system-ui,sans-serif`;
+    let t = state.players[i];
+    const maxW = r*.72;
+    while(ctx.measureText(t).width>maxW && t.length>3) t = t.slice(0,-2);
+    if(t!==state.players[i]) t += '…';
+    ctx.fillText(t,r-26,0);
     ctx.restore();
   }
   ctx.restore();
 }
 
-/* ---------- game ---------- */
+/* ---------- UI ---------- */
 function setStatus(t){ $('status').textContent = t; }
-
-function start(){
-  const list = $('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  if(list.length < 2){ setStatus('Need at least 2 names.'); return; }
-  players = list; eliminated = []; renderOut();
-  $('setup').style.display = 'none';
-  $('spin').disabled = false;
-  setStatus(`${players.length} players. Spin to eliminate!`);
-  draw();
+function renderOut(){
+  const e = state.eliminated;
+  $('cnt').textContent = e.length;
+  $('outList').innerHTML = e.map(n=>`<li>${esc(n)}</li>`).join('');
+  $('outEmpty').hidden = e.length>0;
+  $('outList').scrollTop = 1e6;
+}
+function render(){
+  draw(); renderOut();
+  $('setup').hidden = !(isHost && state.phase==='setup');
+  $('reset').hidden = !(isHost && state.phase!=='setup');
+  $('spin').disabled = !(isHost && state.phase==='ready' && !busy && state.players.length>1);
+  $('spin2').hidden = !isHost || state.phase!=='ready';
+  $('spin2').disabled = $('spin').disabled;
+  if(busy) return;
+  const n = state.players.length;
+  if(state.phase==='setup') setStatus(isHost ? 'Add your names, then hit Start.' : 'Waiting for the host to start.');
+  else if(state.phase==='done') setStatus('🏆 We have a winner!');
+  else setStatus(isHost ? `${n} left. Click the logo to spin!` : `${n} left. Waiting for the next spin…`);
 }
 
-function spin(){
-  if(spinning || players.length < 2) return;
-  spinning = true; $('spin').disabled = true;
-  const n = players.length, sl = Math.PI*2/n;
-  const target = Math.floor(rand()*n);
-  // pointer is at top (-90deg). Slice i centre sits at angle + i*sl + sl/2 ; want that == -PI/2 (mod 2PI)
-  const jitter = (rand()-.5) * sl * .8;
-  let final = -Math.PI/2 - (target*sl + sl/2) + jitter;
-  const turns = 6 + Math.floor(rand()*3);
-  const startA = angle % (Math.PI*2);
-  let delta = final - startA; delta = ((delta % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
-  const total = delta + turns*Math.PI*2;
-  const dur = 6500 + rand()*1500, t0 = performance.now();
-  let lastSlice = -1;
-  setStatus('Spinning…');
+/* ---------- state sync (signed messages over a public relay) ---------- */
+const RELAY = 'https://ntfy.sh/';
+let ch = '', privKey = null, pubKey = null, pubB64 = '', sendChain = Promise.resolve();
+const b64u = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')), c=>c.charCodeAt(0));
+const jwkToB64 = j => btoa(JSON.stringify(j)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64ToJwk = s => JSON.parse(atob(s.replace(/-/g,'+').replace(/_/g,'/')));
+const ALG = {name:'ECDSA',namedCurve:'P-256'}, SIG = {name:'ECDSA',hash:'SHA-256'};
+
+function emitState(){
+  if(!isHost || !privKey) return;
+  const s = JSON.parse(JSON.stringify(state));
+  if(s.spin) s.t = Math.round(performance.now()-spinClock);
+  try{ localStorage.setItem('sgw-'+ch, JSON.stringify(state)); }catch(e){}
+  sendChain = sendChain.then(async () => {
+    const m = JSON.stringify({s, ts: Date.now()});
+    const sig = await crypto.subtle.sign(SIG, privKey, new TextEncoder().encode(m));
+    const body = JSON.stringify({m, g: b64u(sig)});
+    for(let i=0;i<3;i++){
+      try{ const r = await fetch(RELAY+ch, {method:'POST', body}); if(r.ok){ setLive(true); return; } }catch(e){}
+      await new Promise(r=>setTimeout(r,1500));
+    }
+    setLive(false);
+  });
+}
+function setLive(ok){ $('liveB').textContent = ok ? 'Live' : 'Reconnecting…'; $('liveB').classList.toggle('on', ok); }
+
+async function handleRelay(raw, initial){
+  let env; try{ env = JSON.parse(raw); }catch(e){ return; }
+  if(!env || typeof env.m!=='string' || typeof env.g!=='string') return;
+  let ok = false;
+  try{ ok = await crypto.subtle.verify(SIG, pubKey, unb64u(env.g), new TextEncoder().encode(env.m)); }catch(e){}
+  if(!ok) return;
+  let p; try{ p = JSON.parse(env.m); }catch(e){ return; }
+  if(!p || !p.s) return;
+  const s = p.s;
+  if(initial && s.spin){
+    const age = Date.now() - p.ts, sp = s.spin;
+    if(age < sp.dur + 1000){ s.t = (s.t||0) + Math.max(0,age); }
+    else {
+      const players = s.players.slice(); players.splice(sp.target,1);
+      s.eliminated = s.eliminated.concat(s.players[sp.target]); s.players = players;
+      s.phase = players.length===1 ? 'done':'ready'; s.winner = players.length===1 ? players[0] : ''; s.spin = null; delete s.t;
+    }
+  }
+  if(!isHost) applyRemote(s);
+}
+function applyRemote(s){
+  if(!s || !Array.isArray(s.players) || !Array.isArray(s.eliminated)) return;
+  latest = {phase:String(s.phase), players:s.players.map(String), eliminated:s.eliminated.map(String), spin:s.spin||null, winner:String(s.winner||'')};
+  if(busy) return;
+  if(latest.spin && latest.spin.id !== seenSpin){
+    state = latest; seenSpin = latest.spin.id;
+    runSpin(latest.spin, Math.max(0,Number(s.t)||0));
+    return;
+  }
+  if(latest.spin && latest.spin.id === seenSpin) return;
+  state = latest; angle = 0; render();
+  if(state.phase==='done' && state.winner && !winShown){ winShown = true; win(state.winner); }
+}
+
+/* ---------- spin ---------- */
+function runSpin(sp, offsetMs){
+  busy = true; render(); setStatus('Spinning…');
+  const n = state.players.length, sl = TAU/n;
+  const final = -Math.PI/2 - (sp.target*sl + sl/2) + sp.jit*sl;
+  const delta = ((final % TAU)+TAU)%TAU;
+  const total = delta + sp.turns*TAU;
+  const dur = reduce ? 800 : sp.dur;
+  const t0 = performance.now() - offsetMs*(dur/sp.dur);
+  spinClock = performance.now() - offsetMs;
+  let last = -1;
   (function frame(now){
-    const p = Math.min(1,(now-t0)/dur), e = 1 - Math.pow(1-p,4);
-    angle = startA + total*e; draw();
-    const cur = Math.floor((((-Math.PI/2 - angle)%(Math.PI*2))+Math.PI*2)%(Math.PI*2)/sl);
-    if(cur !== lastSlice){ lastSlice = cur; tick(); }
-    if(p < 1) requestAnimationFrame(frame); else finish(target);
-  })(t0);
+    const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,4);
+    angle = total*e; draw();
+    const cur = Math.floor((((-Math.PI/2-angle)%TAU)+TAU)%TAU/sl);
+    if(cur!==last){ last = cur; tick(); }
+    if(p<1) requestAnimationFrame(frame); else spinDone(sp);
+  })(performance.now());
 }
-
-function finish(idx){
-  const name = players.splice(idx,1)[0];
-  eliminated.push(name); renderOut(); boom();
+function spinDone(sp){
+  const name = state.players[sp.target];
+  boom();
   const ov = $('overlay');
-  ov.innerHTML = `<div style="font-size:28px;opacity:.8">ELIMINATED</div><div class="out">${esc(name)}</div>`;
+  ov.innerHTML = `<div class="lbl">ELIMINATED</div><div class="out">${esc(name)}</div>`;
   ov.classList.add('show');
   setTimeout(()=>{
     ov.classList.remove('show');
-    angle = 0; draw(); spinning = false;
-    if(players.length === 1) win(players[0]);
-    else { $('spin').disabled = false; setStatus(`${players.length} left. Spin again!`); }
-  }, 2200);
+    busy = false; angle = 0;
+    if(isHost){
+      const players = state.players.slice(); players.splice(sp.target,1);
+      const eliminated = state.eliminated.concat(name);
+      state = {phase: players.length===1 ? 'done':'ready', players, eliminated, spin:null, winner: players.length===1?players[0]:''};
+      latest = state; emitState(); render();
+      if(state.phase==='done' && !winShown){ winShown = true; win(state.winner); }
+    } else {
+      // viewer: show the host's newest state, with the spun-out name removed if it has not arrived yet
+      if(latest.spin && latest.spin.id===sp.id){
+        const players = state.players.slice(); players.splice(sp.target,1);
+        state = {phase: players.length===1?'done':'ready', players, eliminated: state.eliminated.concat(name), spin:null, winner: players.length===1?players[0]:''};
+      } else state = latest;
+      render();
+      if(state.phase==='done' && state.winner && !winShown){ winShown = true; win(state.winner); }
+    }
+  }, reduce ? 800 : 2200);
 }
-
+let winShown = false;
 function win(name){
   setStatus('🏆 We have a winner!');
-  $('overlay').innerHTML = `<div class="crown">👑</div><div style="font-size:26px;opacity:.8">WINNER</div><div class="name">${esc(name)}</div><button class="btn" onclick="$('overlay').classList.remove('show')">Close</button>`;
+  $('overlay').innerHTML = `<div class="crown">👑</div><div class="lbl">WINNER</div><div class="name">${esc(name)}</div><button class="btn" id="closeOv">Close</button>`;
   $('overlay').classList.add('show');
+  $('closeOv').onclick = () => $('overlay').classList.remove('show');
   boom(400); confetti();
 }
 
-function renderOut(){
-  $('cnt').textContent = eliminated.length;
-  $('outList').innerHTML = eliminated.map(n=>`<li>${esc(n)}</li>`).join('');
-  $('outList').scrollTop = 1e6;
+/* ---------- host actions ---------- */
+function start(){
+  const list = $('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(list.length<2){ setStatus('Need at least 2 names.'); return; }
+  winShown = false; seenSpin = '';
+  state = {phase:'ready', players:list, eliminated:[], spin:null, winner:''}; latest = state;
+  emitState(); render();
 }
-function esc(s){ return s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
+function hostSpin(){
+  if(!isHost || busy || state.phase!=='ready' || state.players.length<2) return;
+  const n = state.players.length;
+  const sp = {id: Date.now().toString(36)+Math.floor(rand()*1e6), target: Math.floor(rand()*n), jit:(rand()-.5)*.8, turns: 6+Math.floor(rand()*3), dur: 6500+Math.floor(rand()*1500)};
+  state = {...state, spin: sp}; seenSpin = sp.id; spinClock = performance.now();
+  emitState();
+  runSpin(sp,0);
+}
 function reset(){
-  if(spinning) return;
-  players = []; eliminated = []; angle = 0; renderOut(); draw();
-  $('setup').style.display = ''; $('spin').disabled = true;
+  if(!isHost || busy) return;
+  winShown = false; seenSpin = '';
+  state = {phase:'setup', players:[], eliminated:[], spin:null, winner:''}; latest = state; angle = 0;
   $('overlay').classList.remove('show');
-  setStatus('Add your names, then hit Start.');
+  emitState(); render();
 }
 
 /* ---------- confetti ---------- */
 function confetti(){
+  if(reduce) return;
   const fx = $('fx'), g = fx.getContext('2d');
   fx.width = innerWidth; fx.height = innerHeight;
-  const ps = Array.from({length:220},()=>({x:Math.random()*fx.width,y:-20-Math.random()*fx.height*.5,vx:(Math.random()-.5)*4,vy:2+Math.random()*5,s:5+Math.random()*7,c:COLORS[Math.floor(Math.random()*COLORS.length)],r:Math.random()*6}));
+  const ps = Array.from({length:220},()=>({x:Math.random()*fx.width,y:-20-Math.random()*fx.height*.5,vx:(Math.random()-.5)*4,vy:2+Math.random()*5,s:5+Math.random()*7,c:COLORS[Math.floor(Math.random()*COLORS.length)]==='#0b0b2b'?'#fff':COLORS[Math.floor(Math.random()*COLORS.length)],r:Math.random()*6}));
   let f = 0;
   (function loop(){
     g.clearRect(0,0,fx.width,fx.height);
     ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.r+=.1;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.fillStyle=p.c;g.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6);g.restore();});
-    if(++f < 400) requestAnimationFrame(loop); else g.clearRect(0,0,fx.width,fx.height);
+    if(++f<400) requestAnimationFrame(loop); else g.clearRect(0,0,fx.width,fx.height);
   })();
 }
 
 /* ---------- wiring ---------- */
 $('start').onclick = start;
-$('spin').onclick = spin;
+$('spin').onclick = hostSpin;
+$('spin2').onclick = hostSpin;
 $('reset').onclick = reset;
-$('sample').onclick = ()=>{ $('names').value = Array.from({length:25},(_,i)=>'Member '+(i+1)).join('\n'); };
-$('mute').onclick = ()=>{ sound = !sound; $('mute').textContent = 'Sound: ' + (sound?'on':'off'); };
+$('sample').onclick = () => { $('names').value = Array.from({length:25},(_,i)=>'Member '+(i+1)).join('\n'); };
+$('mute').onclick = () => { sound = !sound; $('mute').textContent = 'Sound: '+(sound?'on':'off'); };
 $('sample').click();
-draw();
+render();
+
+/* ---------- boot ---------- */
+function show(id,on){ $(id).hidden = !on; }
+async function boot(){
+  const h = location.hash.slice(1);
+  const m = h.match(/^(h|w)=([A-Za-z0-9_-]{8,64})\.([A-Za-z0-9_-]+)(?:\.([A-Za-z0-9_-]+))?$/);
+  if(!m){
+    if(h==='new'){ showCreate(); return; }
+    show('create', false); show('setup', false);
+    $('roleB').textContent = 'Watching'; $('liveB').textContent = 'No link';
+    setStatus('Open the watch link the host sent you to see the raffle live.');
+    return;
+  }
+  isHost = m[1]==='h'; ch = m[2];
+  try{
+    if(isHost){
+      const priv = b64ToJwk(m[3]);
+      privKey = await crypto.subtle.importKey('jwk', priv, ALG, false, ['sign']);
+      const pub = {kty:priv.kty, crv:priv.crv, x:priv.x, y:priv.y, ext:true};
+      pubKey = await crypto.subtle.importKey('jwk', pub, ALG, true, ['verify']);
+      pubB64 = jwkToB64(pub);
+    } else {
+      pubKey = await crypto.subtle.importKey('jwk', b64ToJwk(m[3]), ALG, true, ['verify']);
+    }
+  }catch(e){ setStatus('This link looks incomplete. Ask the host to send it again.'); return; }
+  show('create', false);
+  $('roleB').textContent = isHost ? 'Host' : 'Watching';
+  $('roleB').classList.toggle('on', isHost);
+  $('liveB').textContent = 'Connecting…';
+  if(isHost){
+    $('watchUrl').value = location.origin + location.pathname + '#w=' + ch + '.' + pubB64;
+    show('share', true);
+    try{ const saved = JSON.parse(localStorage.getItem('sgw-'+ch)||'null'); if(saved && saved.players && !saved.spin){ state = saved; latest = saved; } }catch(e){}
+    render(); setLive(true);
+    return;
+  }
+  render();
+  // catch up: newest message, then follow live
+  try{
+    const r = await fetch(RELAY+ch+'/json?poll=1&since=all');
+    const lines = (await r.text()).trim().split('\n').filter(Boolean);
+    let lastMsg = null;
+    for(const ln of lines){ try{ const o = JSON.parse(ln); if(o.event==='message') lastMsg = o.message; }catch(e){} }
+    if(lastMsg) await handleRelay(lastMsg, true);
+  }catch(e){}
+  const es = new EventSource(RELAY+ch+'/sse');
+  es.onopen = () => setLive(true);
+  es.onerror = () => setLive(false);
+  es.onmessage = ev => { try{ const o = JSON.parse(ev.data); if(o.event==='message') handleRelay(o.message,false); }catch(e){} };
+}
+async function showCreate(){
+  show('create', true); show('setup', false);
+  setStatus('Create a raffle to get your host link and the link to share.');
+  $('roleB').textContent = 'New'; $('liveB').textContent = 'Not connected';
+  $('make').onclick = async () => {
+    const kp = await crypto.subtle.generateKey(ALG, true, ['sign','verify']);
+    const priv = await crypto.subtle.exportKey('jwk', kp.privateKey);
+    const rnd = b64u(crypto.getRandomValues(new Uint8Array(14)));
+    const id = 'sgw-' + rnd;
+    location.hash = 'h=' + id + '.' + jwkToB64(priv);
+    location.reload();
+  };
+}
+$('copyWatch').onclick = async () => { try{ await navigator.clipboard.writeText($('watchUrl').value); $('copyWatch').textContent='Copied'; }catch(e){ $('watchUrl').select(); } setTimeout(()=>$('copyWatch').textContent='Copy',1500); };
+boot();
 </script>
-</body>
-</html>
+</body></html>
