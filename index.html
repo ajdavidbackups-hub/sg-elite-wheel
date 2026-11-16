@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SG Elite Wheel</title>
+<style>
+  :root{--bg:#000;--panel:#0d0a1f;--gold:#ff09a8;--text:#f2f4ff;--red:#ff4d6d}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 30%,#2a0a3a,#000 65%);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px}
+  h1{margin:4px 0 2px;letter-spacing:3px;color:var(--gold);text-shadow:0 0 20px #ff09a8aa;text-align:center}
+  .logo{height:90px;margin:0 auto;display:block;mix-blend-mode:screen}
+  .sub{opacity:.7;margin-bottom:12px;text-align:center}
+  .main{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1100px}
+  .stage{position:relative;width:min(92vw,640px);aspect-ratio:1}
+  canvas#wheel{width:100%;height:100%;display:block}
+  .pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:44px solid var(--gold);filter:drop-shadow(0 3px 6px #000);z-index:2}
+  .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17%;aspect-ratio:1;border-radius:50%;border:4px solid var(--gold);background:#000 url(logo.png) center/160% no-repeat;color:transparent;font-weight:800;font-size:clamp(12px,2.6vw,20px);cursor:pointer;z-index:2;box-shadow:0 0 20px #000}
+  .hub:disabled{opacity:.5;cursor:default}
+  .side{width:min(92vw,320px);display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border-radius:14px;padding:14px;border:1px solid #5a1050}
+  .card h3{margin:0 0 8px;font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:.8}
+  textarea{width:100%;height:170px;background:#0b0d17;color:var(--text);border:1px solid #5a1050;border-radius:8px;padding:8px;font:inherit;resize:vertical}
+  button.btn{background:var(--gold);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;margin-top:8px;margin-right:6px}
+  button.btn.alt{background:#3a1550;color:var(--text)}
+  ol{margin:0;padding-left:22px;max-height:200px;overflow:auto;font-size:14px}
+  ol li{padding:2px 0;color:#ff9db0}
+  #status{font-size:18px;text-align:center;min-height:28px;margin:8px 0}
+  #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:#000a;z-index:10;text-align:center}
+  #overlay.show{display:flex}
+  #overlay .crown{font-size:90px}
+  #overlay .name{font-size:clamp(36px,9vw,90px);font-weight:900;color:var(--gold);text-shadow:0 0 30px #ff09a8}
+  #overlay .out{font-size:clamp(28px,7vw,64px);font-weight:900;color:var(--red)}
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:11}
+</style>
+</head>
+<body>
+<img class="logo" src="logo.png" alt="SG">
+<h1>ELITE WHEEL</h1>
+<div class="sub">Last name standing wins. Whoever the wheel stops on is OUT.</div>
+<div id="status">Add your names, then hit Start.</div>
+
+<div class="main">
+  <div class="stage">
+    <div class="pointer"></div>
+    <canvas id="wheel" width="1280" height="1280"></canvas>
+    <button class="hub" id="spin" disabled aria-label="Spin"></button>
+  </div>
+
+  <div class="side">
+    <div class="card" id="setup">
+      <h3>Participants (one per line)</h3>
+      <textarea id="names"></textarea>
+      <button class="btn" id="start">Start raffle</button>
+      <button class="btn alt" id="sample">Fill 25 sample</button>
+    </div>
+    <div class="card">
+      <h3>Eliminated (<span id="cnt">0</span>)</h3>
+      <ol id="outList"></ol>
+      <button class="btn alt" id="reset">Reset</button>
+      <button class="btn alt" id="mute">Sound: on</button>
+    </div>
+  </div>
+</div>
+
+<div id="overlay"></div>
+<canvas id="fx"></canvas>
+
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $('wheel'), ctx = canvas.getContext('2d');
+const COLORS = ['#ff09a8','#12123a','#c4007f','#1f1f66','#ff5cc8','#0a0a2a'];
+let players = [], eliminated = [], angle = 0, spinning = false, sound = true;
+
+function rand(){ const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
+
+/* ---------- audio ---------- */
+let ac;
+function tick(){
+  if(!sound) return;
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 900; g.gain.setValueAtTime(.08, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .05);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + .05);
+  }catch(e){}
+}
+function boom(freq=140){
+  if(!sound) return;
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type='sawtooth'; o.frequency.setValueAtTime(freq, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(40, ac.currentTime + .5);
+    g.gain.setValueAtTime(.2, ac.currentTime); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .6);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + .6);
+  }catch(e){}
+}
+
+/* ---------- drawing ---------- */
+function draw(){
+  const W = canvas.width, c = W/2, r = c - 14, n = players.length;
+  ctx.clearRect(0,0,W,W);
+  ctx.save(); ctx.translate(c,c);
+  ctx.beginPath(); ctx.arc(0,0,r+10,0,7); ctx.fillStyle='#ff09a8'; ctx.fill();
+  if(!n){ ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fillStyle='#151933'; ctx.fill(); ctx.restore(); return; }
+  ctx.rotate(angle);
+  const sl = Math.PI*2/n;
+  for(let i=0;i<n;i++){
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,i*sl,(i+1)*sl); ctx.closePath();
+    ctx.fillStyle = COLORS[i % COLORS.length]; ctx.fill();
+    ctx.strokeStyle='#0b0d17'; ctx.lineWidth=3; ctx.stroke();
+    ctx.save(); ctx.rotate(i*sl + sl/2);
+    ctx.fillStyle='#fff'; ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.shadowColor='#0008'; ctx.shadowBlur=4;
+    const fs = Math.max(16, Math.min(46, r*sl*0.5));
+    ctx.font = `700 ${fs}px system-ui,sans-serif`;
+    let t = players[i];
+    const maxW = r*0.72;
+    while(ctx.measureText(t).width > maxW && t.length > 3) t = t.slice(0,-2);
+    if(t !== players[i]) t += '…';
+    ctx.fillText(t, r-26, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ---------- game ---------- */
+function setStatus(t){ $('status').textContent = t; }
+
+function start(){
+  const list = $('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(list.length < 2){ setStatus('Need at least 2 names.'); return; }
+  players = list; eliminated = []; renderOut();
+  $('setup').style.display = 'none';
+  $('spin').disabled = false;
+  setStatus(`${players.length} players. Spin to eliminate!`);
+  draw();
+}
+
+function spin(){
+  if(spinning || players.length < 2) return;
+  spinning = true; $('spin').disabled = true;
+  const n = players.length, sl = Math.PI*2/n;
+  const target = Math.floor(rand()*n);
+  // pointer is at top (-90deg). Slice i centre sits at angle + i*sl + sl/2 ; want that == -PI/2 (mod 2PI)
+  const jitter = (rand()-.5) * sl * .8;
+  let final = -Math.PI/2 - (target*sl + sl/2) + jitter;
+  const turns = 6 + Math.floor(rand()*3);
+  const startA = angle % (Math.PI*2);
+  let delta = final - startA; delta = ((delta % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+  const total = delta + turns*Math.PI*2;
+  const dur = 6500 + rand()*1500, t0 = performance.now();
+  let lastSlice = -1;
+  setStatus('Spinning…');
+  (function frame(now){
+    const p = Math.min(1,(now-t0)/dur), e = 1 - Math.pow(1-p,4);
+    angle = startA + total*e; draw();
+    const cur = Math.floor((((-Math.PI/2 - angle)%(Math.PI*2))+Math.PI*2)%(Math.PI*2)/sl);
+    if(cur !== lastSlice){ lastSlice = cur; tick(); }
+    if(p < 1) requestAnimationFrame(frame); else finish(target);
+  })(t0);
+}
+
+function finish(idx){
+  const name = players.splice(idx,1)[0];
+  eliminated.push(name); renderOut(); boom();
+  const ov = $('overlay');
+  ov.innerHTML = `<div style="font-size:28px;opacity:.8">ELIMINATED</div><div class="out">${esc(name)}</div>`;
+  ov.classList.add('show');
+  setTimeout(()=>{
+    ov.classList.remove('show');
+    angle = 0; draw(); spinning = false;
+    if(players.length === 1) win(players[0]);
+    else { $('spin').disabled = false; setStatus(`${players.length} left. Spin again!`); }
+  }, 2200);
+}
+
+function win(name){
+  setStatus('🏆 We have a winner!');
+  $('overlay').innerHTML = `<div class="crown">👑</div><div style="font-size:26px;opacity:.8">WINNER</div><div class="name">${esc(name)}</div><button class="btn" onclick="$('overlay').classList.remove('show')">Close</button>`;
+  $('overlay').classList.add('show');
+  boom(400); confetti();
+}
+
+function renderOut(){
+  $('cnt').textContent = eliminated.length;
+  $('outList').innerHTML = eliminated.map(n=>`<li>${esc(n)}</li>`).join('');
+  $('outList').scrollTop = 1e6;
+}
+function esc(s){ return s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function reset(){
+  if(spinning) return;
+  players = []; eliminated = []; angle = 0; renderOut(); draw();
+  $('setup').style.display = ''; $('spin').disabled = true;
+  $('overlay').classList.remove('show');
+  setStatus('Add your names, then hit Start.');
+}
+
+/* ---------- confetti ---------- */
+function confetti(){
+  const fx = $('fx'), g = fx.getContext('2d');
+  fx.width = innerWidth; fx.height = innerHeight;
+  const ps = Array.from({length:220},()=>({x:Math.random()*fx.width,y:-20-Math.random()*fx.height*.5,vx:(Math.random()-.5)*4,vy:2+Math.random()*5,s:5+Math.random()*7,c:COLORS[Math.floor(Math.random()*COLORS.length)],r:Math.random()*6}));
+  let f = 0;
+  (function loop(){
+    g.clearRect(0,0,fx.width,fx.height);
+    ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.r+=.1;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.fillStyle=p.c;g.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6);g.restore();});
+    if(++f < 400) requestAnimationFrame(loop); else g.clearRect(0,0,fx.width,fx.height);
+  })();
+}
+
+/* ---------- wiring ---------- */
+$('start').onclick = start;
+$('spin').onclick = spin;
+$('reset').onclick = reset;
+$('sample').onclick = ()=>{ $('names').value = Array.from({length:25},(_,i)=>'Member '+(i+1)).join('\n'); };
+$('mute').onclick = ()=>{ sound = !sound; $('mute').textContent = 'Sound: ' + (sound?'on':'off'); };
+$('sample').click();
+draw();
+</script>
+</body>
+</html>
