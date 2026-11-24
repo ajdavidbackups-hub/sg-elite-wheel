@@ -419,10 +419,9 @@ async function boot(){
   const h = location.hash.slice(1);
   const m = h.match(/^(h|w)=([A-Za-z0-9_-]{8,64})\.([A-Za-z0-9_-]+)(?:\.([A-Za-z0-9_-]+))?$/);
   if(!m){
-    if(h==='new'){ showCreate(); return; }
-    show('create', false); show('setup', false);
-    $('roleB').textContent = 'Watching'; $('liveB').textContent = 'No link';
-    setStatus('Open the watch link the host sent you to see the raffle live.');
+    // no raffle in the link: let the host create one here; guests are told to use their watch link
+    showCreate();
+    if(h!=='new') setStatus('Hosting? Click Create raffle. Watching? Open the watch link the host sent you.');
     return;
   }
   isHost = m[1]==='h'; ch = m[2];
@@ -476,6 +475,8 @@ async function showCreate(){
   };
 }
 $('copyWatch').onclick = async () => { try{ await navigator.clipboard.writeText($('watchUrl').value); $('copyWatch').textContent='Copied'; }catch(e){ $('watchUrl').select(); } setTimeout(()=>$('copyWatch').textContent='Copy',1500); };
+// a changed link (e.g. #new typed into an open tab, or a watch link pasted in) needs a fresh start
+addEventListener('hashchange', () => location.reload());
 boot();
 </script>
 </body></html>
