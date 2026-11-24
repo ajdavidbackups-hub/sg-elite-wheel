@@ -27,12 +27,14 @@ canvas#wheel{width:100%;height:100%;display:block}
 .card h3{margin:0 0 8px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
 textarea{width:100%;height:170px;background:#05030f;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
 .btn{background:var(--pink);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;margin:8px 6px 0 0;font:inherit;font-weight:700}
+.btn:disabled{opacity:.5;cursor:default}
 .btn.alt{background:#2c1245;color:var(--text)}
 ol{margin:0;padding-left:24px;max-height:220px;overflow:auto;font-size:14px;color:var(--out)}
 ol li{padding:2px 0}
 ol li .putback{margin-left:8px;background:#2c1245;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font:inherit;font-size:12px;cursor:pointer;touch-action:manipulation}
 ol li .putback:hover{border-color:var(--pink)}
 ol li .putback:disabled{opacity:.4;cursor:default}
+ol.winners{color:#ffd166}
 .empty{color:var(--dim);font-size:14px}
 #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:#000b;z-index:10;text-align:center;padding:16px}
 #overlay.show{display:flex}
@@ -57,8 +59,8 @@ ol li .putback:disabled{opacity:.4;cursor:default}
 
 <img class="logo" src="logo.png" alt="SG">
 <h1>ELITE WHEEL</h1>
-<div class="sub">Last name standing wins. Whoever the wheel stops on is out.</div>
-<div class="badges"><span class="badge" id="roleB">Watching</span><span class="badge" id="liveB">Connecting…</span></div>
+<div class="sub" id="sub">Last name standing wins. Whoever the wheel stops on is out.</div>
+<div class="badges"><span class="badge" id="roleB">Watching</span><span class="badge on" id="modeB">Elimination</span><span class="badge" id="liveB">Connecting…</span></div>
 <div id="status">Waiting for the host to start.</div>
 
 <div class="main">
@@ -89,6 +91,16 @@ ol li .putback:disabled{opacity:.4;cursor:default}
       <button class="btn alt" id="sample">Fill 25 sample</button>
       <div class="note">Only you see this box. Watchers see the wheel and every spin live.</div>
     </div>
+    <div class="card" id="modeCard" hidden>
+      <h3>Mode</h3>
+      <button class="btn" id="mode">Mode: Elimination</button>
+      <div class="note" id="modeNote">The name the wheel lands on is out. Last name left wins.</div>
+    </div>
+    <div class="card" id="winCard" hidden>
+      <h3>Winners (<span id="wcnt">0</span>)</h3>
+      <ol id="winList" class="winners"></ol>
+      <div class="empty" id="winEmpty">Nobody yet.</div>
+    </div>
     <div class="card">
       <h3>Eliminated (<span id="cnt">0</span>)</h3>
       <ol id="outList"></ol>
@@ -109,8 +121,31 @@ const TAU = Math.PI*2;
 const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
 
 let isHost = false, room = null, sound = true;
-// state = {phase:'setup'|'ready'|'done', players:[], eliminated:[], spin:null|{id,target,jit,turns,dur}, winner:''}
-let state = {phase:'setup', players:[], eliminated:[], spin:null, winner:''};
+// state = {phase:'setup'|'ready'|'done', mode:'elim'|'win', players:[], eliminated:[], winners:[], spin:null|{id,target,jit,turns,dur,mode}, winner:''}
+// mode 'elim': the name the wheel lands on is out, last one left wins. mode 'win': the name it lands on wins.
+let state = {phase:'setup', mode:'elim', players:[], eliminated:[], winners:[], spin:null, winner:''};
+function normalize(s){
+  return {phase:String(s.phase||'setup'), mode: s.mode==='win'?'win':'elim',
+    players:(s.players||[]).map(String), eliminated:(s.eliminated||[]).map(String), winners:(s.winners||[]).map(String),
+    spin:s.spin||null, winner:String(s.winner||'')};
+}
+// work out phase and winner from what is left on the wheel
+function settle(s){
+  const n = s.players.length;
+  if(s.mode==='win'){ s.phase = n ? 'ready' : 'done'; s.winner = ''; }
+  else { s.phase = n<=1 ? 'done' : 'ready'; s.winner = n===1 ? s.players[0] : ''; }
+  return s;
+}
+// the state after a spin lands: the landed name moves to eliminated or winners, depending on the spin's mode
+function resultOf(s, sp){
+  const name = s.players[sp.target];
+  const players = s.players.slice(); players.splice(sp.target,1);
+  const win = sp.mode==='win';
+  return settle({...s, spin:null, players,
+    eliminated: win ? s.eliminated : s.eliminated.concat(name),
+    winners: win ? s.winners.concat(name) : s.winners});
+}
+const minPlayers = () => state.mode==='win' ? 1 : 2;
 let latest = state, busy = false, seenSpin = '', spinStart = 0, spinClock = 0, angle = 0;
 
 function rand(){ const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]/4294967296; }
@@ -161,25 +196,37 @@ function draw(){
 
 /* ---------- UI ---------- */
 function setStatus(t){ $('status').textContent = t; }
-function renderOut(){
-  const e = state.eliminated;
-  $('cnt').textContent = e.length;
+function renderList(list, ol, empty, cnt, from){
   const canPut = isHost && state.phase!=='setup';
-  $('outList').innerHTML = e.map((n,i)=>`<li>${esc(n)}${canPut?`<button class="putback" data-i="${i}" ${busy?'disabled':''} aria-label="Put ${esc(n)} back on the wheel">Put back</button>`:''}</li>`).join('');
-  $('outEmpty').hidden = e.length>0;
-  $('outList').scrollTop = 1e6;
+  $(cnt).textContent = list.length;
+  $(ol).innerHTML = list.map((n,i)=>`<li>${esc(n)}${canPut?`<button class="putback" data-from="${from}" data-i="${i}" ${busy?'disabled':''} aria-label="Put ${esc(n)} back on the wheel">Put back</button>`:''}</li>`).join('');
+  $(empty).hidden = list.length>0;
+  $(ol).scrollTop = 1e6;
+}
+function renderOut(){
+  renderList(state.eliminated, 'outList', 'outEmpty', 'cnt', 'eliminated');
+  renderList(state.winners, 'winList', 'winEmpty', 'wcnt', 'winners');
+  $('winCard').hidden = !(state.mode==='win' || state.winners.length);
 }
 function render(){
   draw(); renderOut();
+  const win = state.mode==='win';
+  $('sub').textContent = win ? 'Whoever the wheel stops on wins.' : 'Last name standing wins. Whoever the wheel stops on is out.';
+  $('modeB').textContent = win ? 'Winner mode' : 'Elimination mode';
+  $('modeCard').hidden = !isHost;
+  $('mode').textContent = 'Mode: ' + (win ? 'Winner' : 'Elimination');
+  $('mode').disabled = busy;
+  $('modeNote').textContent = win ? 'The name the wheel lands on wins. Spin again to draw more winners.' : 'The name the wheel lands on is out. Last name left wins.';
   $('setup').hidden = !(isHost && state.phase==='setup');
   $('reset').hidden = !(isHost && state.phase!=='setup');
-  $('spin').disabled = !(isHost && state.phase==='ready' && !busy && state.players.length>1);
+  $('spin').disabled = !(isHost && state.phase==='ready' && !busy && state.players.length>=minPlayers());
   $('spin2').hidden = !isHost || state.phase!=='ready';
   $('spin2').disabled = $('spin').disabled;
   if(busy) return;
   const n = state.players.length;
   if(state.phase==='setup') setStatus(isHost ? 'Add your names, then hit Start.' : 'Waiting for the host to start.');
-  else if(state.phase==='done') setStatus('🏆 We have a winner!');
+  else if(state.phase==='done') setStatus(win ? 'Every name has been drawn.' : (state.winner ? '🏆 We have a winner!' : 'No names left on the wheel.'));
+  else if(win) setStatus(isHost ? `${n} on the wheel. Click the logo to pick a winner!` : `${n} on the wheel. Waiting for the next spin…`);
   else setStatus(isHost ? `${n} left. Click the logo to spin!` : `${n} left. Waiting for the next spin…`);
 }
 
@@ -219,20 +266,16 @@ async function handleRelay(raw, initial){
   let p; try{ p = JSON.parse(env.m); }catch(e){ return; }
   if(!p || !p.s) return;
   const s = p.s;
-  if(initial && s.spin){
+  if(initial && s.spin && Array.isArray(s.players)){
     const age = Date.now() - p.ts, sp = s.spin;
     if(age < sp.dur + 1000){ s.t = (s.t||0) + Math.max(0,age); }
-    else {
-      const players = s.players.slice(); players.splice(sp.target,1);
-      s.eliminated = s.eliminated.concat(s.players[sp.target]); s.players = players;
-      s.phase = players.length===1 ? 'done':'ready'; s.winner = players.length===1 ? players[0] : ''; s.spin = null; delete s.t;
-    }
+    else { if(!isHost) applyRemote(resultOf(normalize(s), sp)); return; }
   }
   if(!isHost) applyRemote(s);
 }
 function applyRemote(s){
   if(!s || !Array.isArray(s.players) || !Array.isArray(s.eliminated)) return;
-  latest = {phase:String(s.phase), players:s.players.map(String), eliminated:s.eliminated.map(String), spin:s.spin||null, winner:String(s.winner||'')};
+  latest = normalize(s);
   if(busy) return;
   if(latest.spin && latest.spin.id !== seenSpin){
     state = latest; seenSpin = latest.spin.id;
@@ -268,29 +311,29 @@ function runSpin(sp, offsetMs){
 }
 function spinDone(sp){
   const name = state.players[sp.target];
-  boom();
+  const picked = sp.mode==='win';
   const ov = $('overlay');
-  ov.innerHTML = `<div class="lbl">ELIMINATED</div><div class="out">${esc(name)}</div>`;
+  if(picked){
+    ov.innerHTML = `<div class="crown">👑</div><div class="lbl">WINNER</div><div class="name">${esc(name)}</div>`;
+    boom(400); confetti();
+  } else {
+    ov.innerHTML = `<div class="lbl">ELIMINATED</div><div class="out">${esc(name)}</div>`;
+    boom();
+  }
   ov.classList.add('show');
   setTimeout(()=>{
     ov.classList.remove('show');
     busy = false; angle = 0;
     if(isHost){
-      const players = state.players.slice(); players.splice(sp.target,1);
-      const eliminated = state.eliminated.concat(name);
-      state = {phase: players.length===1 ? 'done':'ready', players, eliminated, spin:null, winner: players.length===1?players[0]:''};
+      state = resultOf(state, sp);
       latest = state; emitState(); render();
-      if(state.phase==='done' && !winShown){ winShown = true; win(state.winner); }
     } else {
-      // viewer: show the host's newest state, with the spun-out name removed if it has not arrived yet
-      if(latest.spin && latest.spin.id===sp.id){
-        const players = state.players.slice(); players.splice(sp.target,1);
-        state = {phase: players.length===1?'done':'ready', players, eliminated: state.eliminated.concat(name), spin:null, winner: players.length===1?players[0]:''};
-      } else state = latest;
+      // viewer: show the host's newest state, worked out locally if the host's result has not arrived yet
+      state = (latest.spin && latest.spin.id===sp.id) ? resultOf(state, sp) : latest;
       render();
-      if(state.phase==='done' && state.winner && !winShown){ winShown = true; win(state.winner); }
     }
-  }, reduce ? 800 : 2200);
+    if(state.phase==='done' && state.winner && !winShown){ winShown = true; win(state.winner); }
+  }, reduce ? 800 : (picked ? 4500 : 2200));
 }
 let winShown = false;
 function win(name){
@@ -306,32 +349,40 @@ function start(){
   const list = $('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
   if(list.length<2){ setStatus('Need at least 2 names.'); return; }
   winShown = false; seenSpin = '';
-  state = {phase:'ready', players:list, eliminated:[], spin:null, winner:''}; latest = state;
+  state = {phase:'ready', mode:state.mode, players:list, eliminated:[], winners:[], spin:null, winner:''}; latest = state;
   emitState(); render();
 }
 function hostSpin(){
-  if(!isHost || busy || state.phase!=='ready' || state.players.length<2) return;
+  if(!isHost || busy || state.phase!=='ready' || state.players.length<minPlayers()) return;
   const n = state.players.length;
-  const sp = {id: Date.now().toString(36)+Math.floor(rand()*1e6), target: Math.floor(rand()*n), jit:(rand()-.5)*.8, turns: 6+Math.floor(rand()*3), dur: 6500+Math.floor(rand()*1500)};
+  const sp = {id: Date.now().toString(36)+Math.floor(rand()*1e6), target: Math.floor(rand()*n), jit:(rand()-.5)*.8, turns: 6+Math.floor(rand()*3), dur: 6500+Math.floor(rand()*1500), mode: state.mode};
   state = {...state, spin: sp}; seenSpin = sp.id; spinClock = performance.now();
   emitState();
   runSpin(sp,0);
 }
-function putBack(i){
-  if(!isHost || busy || state.phase==='setup') return;
-  const name = state.eliminated[i];
-  if(name===undefined) return;
-  const eliminated = state.eliminated.slice(); eliminated.splice(i,1);
-  const players = state.players.concat(name);
-  state = {phase: players.length>1 ? 'ready' : 'done', players, eliminated, spin:null, winner: players.length>1 ? '' : players[0]};
+// after the host changes things by hand: re-settle, close any winner screen, tell watchers
+function hostChanged(next){
+  state = next.phase==='setup' ? next : settle(next);
   latest = state; winShown = false; angle = 0;
   $('overlay').classList.remove('show');
   emitState(); render();
+  if(state.phase==='done' && state.winner){ winShown = true; win(state.winner); }
+}
+function putBack(from, i){
+  if(!isHost || busy || state.phase==='setup' || (from!=='eliminated' && from!=='winners')) return;
+  const name = state[from][i];
+  if(name===undefined) return;
+  const list = state[from].slice(); list.splice(i,1);
+  hostChanged({...state, [from]: list, players: state.players.concat(name), spin:null});
+}
+function toggleMode(){
+  if(!isHost || busy) return;
+  hostChanged({...state, mode: state.mode==='win' ? 'elim' : 'win', spin:null});
 }
 function reset(){
   if(!isHost || busy) return;
   winShown = false; seenSpin = '';
-  state = {phase:'setup', players:[], eliminated:[], spin:null, winner:''}; latest = state; angle = 0;
+  state = {phase:'setup', mode:state.mode, players:[], eliminated:[], winners:[], spin:null, winner:''}; latest = state; angle = 0;
   $('overlay').classList.remove('show');
   emitState(); render();
 }
@@ -355,7 +406,8 @@ $('start').onclick = start;
 $('spin').onclick = hostSpin;
 $('spin2').onclick = hostSpin;
 $('reset').onclick = reset;
-$('outList').onclick = ev => { const b = ev.target.closest('.putback'); if(b) putBack(Number(b.dataset.i)); };
+$('outList').onclick = $('winList').onclick = ev => { const b = ev.target.closest('.putback'); if(b) putBack(b.dataset.from, Number(b.dataset.i)); };
+$('mode').onclick = toggleMode;
 $('sample').onclick = () => { $('names').value = Array.from({length:25},(_,i)=>'Member '+(i+1)).join('\n'); };
 $('mute').onclick = () => { sound = !sound; $('mute').textContent = 'Sound: '+(sound?'on':'off'); };
 $('sample').click();
@@ -392,7 +444,7 @@ async function boot(){
   if(isHost){
     $('watchUrl').value = location.origin + location.pathname + '#w=' + ch + '.' + pubB64;
     show('share', true);
-    try{ const saved = JSON.parse(localStorage.getItem('sgw-'+ch)||'null'); if(saved && saved.players && !saved.spin){ state = saved; latest = saved; } }catch(e){}
+    try{ const saved = JSON.parse(localStorage.getItem('sgw-'+ch)||'null'); if(saved && saved.players){ state = normalize(saved); if(state.spin) state = resultOf(state, state.spin); latest = state; } }catch(e){}
     render(); setLive(true);
     return;
   }
